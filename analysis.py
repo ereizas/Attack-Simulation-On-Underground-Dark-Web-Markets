@@ -4,6 +4,7 @@ import igraph as ig
 import powerlaw
 from random import randint
 import numpy as np
+import heapq
 
 #TODO Use small increments of percents going up to 50% or less for country removals
 #TODO Ignore "Digital" and "Unknwown" in node removal for "Ships From"
@@ -83,7 +84,7 @@ def get_lrgst_comp(g:ig.Graph):
             print(g.vs(clust_obj.__getitem__(i))["name"]) #prints membership of clusters in descending order of cluster size"""
     return max(sizes), clust_obj.giant()
 
-def simulate_random_attack(g:ig.Graph,targets:list=None,num_simulations=10,checkpoints=[0.10,0.25,0.5,0.75,0.9],network_name=""):
+def simulate_attack(g:ig.Graph,targets:list=None,num_simulations=10,checkpoints=[0.10,0.25,0.5,0.75,0.9],atk_type="random",network_name=""):
     """
     @param g : network
     @param targets : list of unique target nodes (list for random index removal)
@@ -103,22 +104,51 @@ def simulate_random_attack(g:ig.Graph,targets:list=None,num_simulations=10,check
         tgts = None
         if targets:
             nodes = set(g.vs["name"])
-            n = len(tgts)
-            tgts = [tgt for tgt in targets]
+            n = len(targets)
+            if atk_type=="random":
+                tgts = [tgt for tgt in targets]
+            elif atk_type=="highest degree":
+                degrs = g.degree(targets)
+                tgts = [[-deg, name] for deg, name in zip(degrs, targets)]
+                heapq.heapify(tgts)
         else:
-            nodes = list(g.vs["name"])
-            n = len(nodes)
+            node_names = g.vs["name"]
+            n = len(node_names)
+            if atk_type=="random":
+                nodes = list(node_names)
+            elif atk_type=="highest degree":
+                degrs = g.degree()
+                nodes = [[-deg, name] for deg, name in zip(degrs, node_names)]
+                heapq.heapify(nodes)
         checkpoint = 0
         while checkpoint<len(checkpoints):
             if targets:
                 while len(tgts)>n*(1-checkpoints[checkpoint]):
-                    rm_ind = randint(0,len(tgts)-1)
-                    node_name = tgts.pop(rm_ind)
-                    nodes.remove(node_name)
+                    to_rm = None
+                    if atk_type=="random":
+                        rm_ind = randint(0,len(tgts)-1)
+                        to_rm = tgts.pop(rm_ind)
+                    elif atk_type=="highest degree":
+                        to_rm = heapq.heappop(tgts)[1]
+                        nghbrs = g.neighbors(to_rm)
+                        for i in range(len(tgts)):
+                            if tgts[i][1] in nghbrs:
+                                tgts[i][0]+=1 #incr count bc negative since heapq is min heap by default
+                        heapq.heapify(tgts)
+                    nodes.remove(to_rm)
             else:
                 while len(nodes)>n*(1-checkpoints[checkpoint]):
-                    rm_ind = randint(0,len(nodes)-1)
-                    nodes.pop(rm_ind)
+                    if atk_type=="random":
+                        rm_ind = randint(0,len(nodes)-1)
+                        nodes.pop(rm_ind)
+                    elif atk_type=="highest degree":
+                        to_rm = heapq.heappop(nodes)[1]
+                        nghbrs = g.neighbors(to_rm)
+                        for i in range(len(nodes)):
+                            if nodes[i][1] in nghbrs:
+                                nodes[i][0]+=1
+                        heapq.heapify(nodes)
+                        nodes.remove(to_rm)
             lrgst_comp_size, lrgst_cmp = get_lrgst_comp(g.subgraph(nodes))
             lcc[sim][checkpoint+1] = lrgst_comp_size
             btw = lrgst_cmp.betweenness()
@@ -135,7 +165,10 @@ def simulate_random_attack(g:ig.Graph,targets:list=None,num_simulations=10,check
     plt.title("Impact of Node Removal on Largest Connected Component")
     plt.legend()
     plt.grid()
-    plt.savefig(f"simulation_results/{network_name.lower().replace(' ','_')}_random_removal_lcc.png")
+    if atk_type=="random":
+        plt.savefig(f"simulation_results/{network_name.lower().replace(' ','_')}_random_removal_lcc.png")
+    elif atk_type=="highest degree":
+        plt.savefig(f"simulation_results/{network_name.lower().replace(' ','_')}_high_degr_removal_lcc.png")
     plt.show()
     plt.close()
 
@@ -149,7 +182,10 @@ def simulate_random_attack(g:ig.Graph,targets:list=None,num_simulations=10,check
     plt.title("Impact of Node Removal on Betweenness")
     plt.legend()
     plt.grid()
-    plt.savefig(f"simulation_results/{network_name.lower().replace(' ','_')}_random_removal_betweenness.png")
+    if atk_type=="random":
+        plt.savefig(f"simulation_results/{network_name.lower().replace(' ','_')}_random_removal_betweenness.png")
+    elif atk_type=="highest degree":
+        plt.savefig(f"simulation_results/{network_name.lower().replace(' ','_')}_high_degr_removal_betweenness.png")
     plt.show()
     plt.close()
 
@@ -158,14 +194,15 @@ if __name__=="__main__":
     """agora_df = pd.read_csv("Agora.csv", usecols=["Vendor","Category"], dtype=str)
     vendors = set(agora_df["Vendor"])
     agora_network = create_bpt_network(agora_df,"Vendor","Category",len(vendors))
-    analyze_degr_distr(agora_network,network_name="Agora v-pc")
-    #simulate_random_attack(agora_network,vendors,network_name="Agora v-pc")
+    #analyze_degr_distr(agora_network,network_name="Agora v-pc")
+    #simulate_attack(agora_network,vendors,network_name="Agora v-pc")
+    simulate_attack(agora_network,vendors,network_name="Agora v-pc",atk_type="highest degree")"""
     #print(get_lrgst_comp(agora_network))
     
-    ig.plot(agora_network, target="networks/agora_vendor_category_network.png")
+    """ig.plot(agora_network, target="networks/agora_vendor_category_network.png")
     vend_lst = list(vendors)
-    #analyze_degr_distr(agora_network,vend_lst,"Agora v-pc Vendor")"""
-    """analyze_btwness(agora_network,vend_lst)
+    analyze_degr_distr(agora_network,vend_lst,"Agora v-pc Vendor")
+    analyze_btwness(agora_network,vend_lst)
     analyze_eigen_centrality(agora_network,vend_lst)"""
     
     #market_data_obfuscated.csv cleaning
@@ -231,7 +268,7 @@ if __name__=="__main__":
     print(f"Degree of Unknown: {agora_network.degree(name_to_index.get("Unknown",0))}")
     print(f"Degree of Digital: {agora_network.degree(name_to_index.get("Digital",0))}")"""
     #analyze_degr_distr(agora_network, network_name="Agora sf-v")
-    #simulate_random_attack(agora_network,countries,num_simulations=50,network_name="Agora sf-v")
+    #simulate_attack(agora_network,countries,num_simulations=50,network_name="Agora sf-v")
     """cntr_lst = list(countries)
     analyze_degr_distr(agora_network,cntr_lst, "Agora sf-v Country")
     analyze_btwness(agora_network,cntr_lst)"""
@@ -244,7 +281,7 @@ if __name__=="__main__":
     silk_rd2_network = create_bpt_network(silk_rd2_df[["Vendor Username", "Product Category"]],"Vendor Username", "Product Category",len(vendors))
     ig.plot(silk_rd2_network, target="networks/silk_road_2_vendor_category_network.png")
     analyze_degr_distr(silk_rd2_network,network_name="Silk Road 2 v-pc")
-    simulate_random_attack(silk_rd2_network,vendors,network_name="Silk Road 2 v-pc")
+    simulate_attack(silk_rd2_network,vendors,network_name="Silk Road 2 v-pc")
     vend_lst = list(vendors)
     analyze_degr_distr(silk_rd2_network,vend_lst,"Silk Road 2 v-pc Vendor")"""
     #analyze_btwness(silk_rd2_network,vend_lst)
@@ -257,7 +294,7 @@ if __name__=="__main__":
     print(f"Degree of Digital: {silk_rd2_network.degree(name_to_index.get("Digital",0))}")"""
     #ig.plot(silk_rd2_network, target="networks/silk_road_2_country_vendor_network.png")
     #analyze_degr_distr(silk_rd2_network,network_name="Silk Road 2 sf-v")
-    #simulate_random_attack(silk_rd2_network,countries,num_simulations=50,network_name="Silk Road 2 sf-v")
+    #simulate_attack(silk_rd2_network,countries,num_simulations=50,network_name="Silk Road 2 sf-v")
     """cntr_lst = list(countries)
     analyze_degr_distr(silk_rd2_network,cntr_lst,"Silk Road 2 sf-v Country")
     analyze_btwness(silk_rd2_network,cntr_lst)"""
@@ -271,6 +308,6 @@ if __name__=="__main__":
     evol_network = create_network(evol_df)
     #analyze_degr_distr(evol_network,srcs=None,network_name="Evolution User Network")
     #ig.plot(evol_network, target="networks/evolution_user_network.png")
-    simulate_random_attack(evol_network,num_simulations=3,network_name="Evolution User Network")"""
+    simulate_attack(evol_network,num_simulations=3,network_name="Evolution User Network")"""
     #analyze_btwness(evol_network,cutoff=2)
 
