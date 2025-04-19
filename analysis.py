@@ -7,7 +7,6 @@ import numpy as np
 import heapq
 
 #TODO Use small increments of percents going up to 50% or less for country removals
-#TODO Ignore "Digital" and "Unknwown" in node removal for "Ships From"
 
 def create_bpt_network(rows,s_ctg,t_ctg,num_src):
     #TODO Figure out if links to Unknown should be shown
@@ -84,7 +83,7 @@ def get_lrgst_comp(g:ig.Graph):
             print(g.vs(clust_obj.__getitem__(i))["name"]) #prints membership of clusters in descending order of cluster size"""
     return max(sizes), clust_obj.giant()
 
-def simulate_attack(g:ig.Graph,targets:list=None,num_simulations=10,checkpoints=[0.10,0.25,0.5,0.75,0.9],atk_type="random",network_name=""):
+def simulate_attack(g:ig.Graph,targets:list=None,num_simulations=10,checkpoints=[0.1,0.25,0.5,0.75,0.9],atk_type="random",network_name=""):
     """
     @param g : network
     @param targets : list of unique target nodes (list for random index removal)
@@ -148,8 +147,11 @@ def simulate_attack(g:ig.Graph,targets:list=None,num_simulations=10,checkpoints=
                             if nodes[i][1] in nghbrs:
                                 nodes[i][0]+=1
                         heapq.heapify(nodes)
-                        nodes.remove(to_rm)
-            lrgst_comp_size, lrgst_cmp = get_lrgst_comp(g.subgraph(nodes))
+            lrgst_comp_size, lrgst_cmp = None, None
+            if atk_type=="random" or targets:
+                lrgst_comp_size, lrgst_cmp = get_lrgst_comp(g.subgraph(nodes))
+            elif atk_type=="highest degree":
+                lrgst_comp_size, lrgst_cmp = get_lrgst_comp(g.subgraph([node[1] for node in nodes]))
             lcc[sim][checkpoint+1] = lrgst_comp_size
             btw = lrgst_cmp.betweenness()
             btwness[sim][checkpoint+1] = sum(btw)/len(btw)
@@ -193,25 +195,24 @@ if __name__=="__main__":
     #Agora Vendor-Prod Category
     """agora_df = pd.read_csv("Agora.csv", usecols=["Vendor","Category"], dtype=str)
     vendors = set(agora_df["Vendor"])
-    agora_network = create_bpt_network(agora_df,"Vendor","Category",len(vendors))
+    agora_network = create_bpt_network(agora_df,"Vendor","Category",len(vendors))"""
     #analyze_degr_distr(agora_network,network_name="Agora v-pc")
-    #simulate_attack(agora_network,vendors,network_name="Agora v-pc")
-    simulate_attack(agora_network,vendors,network_name="Agora v-pc",atk_type="highest degree")"""
+    """simulate_attack(agora_network,vendors,num_simulations=50,network_name="Agora v-pc")
+    simulate_attack(agora_network,vendors,num_simulations=1,network_name="Agora v-pc",checkpoints=[0.1,0.25,0.5,0.55,0.6,0.65,0.7,0.75,0.9],atk_type="highest degree")
     #print(get_lrgst_comp(agora_network))
-    
-    """ig.plot(agora_network, target="networks/agora_vendor_category_network.png")
+    ig.plot(agora_network, target="networks/agora_vendor_category_network.png")
     vend_lst = list(vendors)
     analyze_degr_distr(agora_network,vend_lst,"Agora v-pc Vendor")
     analyze_btwness(agora_network,vend_lst)
     analyze_eigen_centrality(agora_network,vend_lst)"""
     
     #market_data_obfuscated.csv cleaning
-    
-    """mkt_data_obf_df = pd.read_csv("market_data_obfuscated.csv", usecols=["Market","Product Category","Ships From","Vendor Username"],dtype=str)
+    """
+    mkt_data_obf_df = pd.read_csv("market_data_obfuscated.csv", usecols=["Market","Product Category","Ships From","Vendor Username"],dtype=str)
     mkt_data_obf_df = mkt_data_obf_df[mkt_data_obf_df["Product Category"]!="intoxicants"] #intoxicants category is inaccurate so it is ignored
     """
     #Country extension functions
-    """countries = set() 
+    countries = set() 
     def extend_countries_lst(vndr:str,vndr_cntrs:set,rgn_expansion_lst:list,exclude:list):
         for country in rgn_expansion_lst:
             if country not in exclude:
@@ -257,18 +258,18 @@ if __name__=="__main__":
                     vndr_cntrs.add((row["Vendor Username"],rgn))
                     if rgn not in ("Digital","Unknown"):
                         countries.add(rgn)
-        return list(vndr_cntrs)"""
+        return list(vndr_cntrs)
 
     #Agora Ship From-Vendor
     """agora_df = mkt_data_obf_df[mkt_data_obf_df["Market"]=="Agora"]
     agora_network = create_bpt_network(expand_regions(agora_df),"Ships From","Vendor Username",len(countries))
-    """
-    #ig.plot(agora_network, target="networks/agora_country_vendor_network.png")
+    #ig.plot(agora_network, target="networks/agora_country_vendor_network.png")"""
     """name_to_index = {v['name']: v.index for v in agora_network.vs}
     print(f"Degree of Unknown: {agora_network.degree(name_to_index.get("Unknown",0))}")
     print(f"Degree of Digital: {agora_network.degree(name_to_index.get("Digital",0))}")"""
     #analyze_degr_distr(agora_network, network_name="Agora sf-v")
     #simulate_attack(agora_network,countries,num_simulations=50,network_name="Agora sf-v")
+    #simulate_attack(agora_network,countries,num_simulations=1,network_name="Agora sf-v",atk_type="highest degree")
     """cntr_lst = list(countries)
     analyze_degr_distr(agora_network,cntr_lst, "Agora sf-v Country")
     analyze_btwness(agora_network,cntr_lst)"""
@@ -279,12 +280,15 @@ if __name__=="__main__":
     #Silk Road 2 Vendor-Prod Category
     """vendors = set(silk_rd2_df["Vendor Username"])
     silk_rd2_network = create_bpt_network(silk_rd2_df[["Vendor Username", "Product Category"]],"Vendor Username", "Product Category",len(vendors))
-    ig.plot(silk_rd2_network, target="networks/silk_road_2_vendor_category_network.png")
+    """
+    """ig.plot(silk_rd2_network, target="networks/silk_road_2_vendor_category_network.png")
     analyze_degr_distr(silk_rd2_network,network_name="Silk Road 2 v-pc")
-    simulate_attack(silk_rd2_network,vendors,network_name="Silk Road 2 v-pc")
+    simulate_attack(silk_rd2_network,vendors,num_simulations=50,network_name="Silk Road 2 v-pc")
+    simulate_attack(silk_rd2_network,vendors,num_simulations=1,network_name="Silk Road 2 v-pc",checkpoints=[0.1,0.25,0.3,0.35,0.4,0.45,0.5,0.75,0.9],atk_type="highest degree")
     vend_lst = list(vendors)
-    analyze_degr_distr(silk_rd2_network,vend_lst,"Silk Road 2 v-pc Vendor")"""
+    analyze_degr_distr(silk_rd2_network,vend_lst,"Silk Road 2 v-pc Vendor")
     #analyze_btwness(silk_rd2_network,vend_lst)
+    """
     
     #Silk Road 2 Ship From-Vendor Network
     """countries = set()
@@ -295,12 +299,13 @@ if __name__=="__main__":
     #ig.plot(silk_rd2_network, target="networks/silk_road_2_country_vendor_network.png")
     #analyze_degr_distr(silk_rd2_network,network_name="Silk Road 2 sf-v")
     #simulate_attack(silk_rd2_network,countries,num_simulations=50,network_name="Silk Road 2 sf-v")
+    #simulate_attack(silk_rd2_network,countries,num_simulations=1,network_name="Silk Road 2 sf-v",atk_type="highest degree")
     """cntr_lst = list(countries)
     analyze_degr_distr(silk_rd2_network,cntr_lst,"Silk Road 2 sf-v Country")
     analyze_btwness(silk_rd2_network,cntr_lst)"""
 
     #Evolution User-User network
-    """evol_df = pd.read_csv("evolution_data/network/edges-2014-1.tsv",usecols=["Source","Target"],sep="\t",dtype=str)
+    evol_df = pd.read_csv("evolution_data/network/edges-2014-1.tsv",usecols=["Source","Target"],sep="\t",dtype=str)
     for i in range(2,13):
         evol_df = pd.concat([evol_df,pd.read_csv(f"evolution_data/network/edges-2014-{i}.tsv",usecols=["Source","Target"],sep="\t",dtype=str)],ignore_index=True)
     for i in range(1,4):
@@ -308,6 +313,7 @@ if __name__=="__main__":
     evol_network = create_network(evol_df)
     #analyze_degr_distr(evol_network,srcs=None,network_name="Evolution User Network")
     #ig.plot(evol_network, target="networks/evolution_user_network.png")
-    simulate_attack(evol_network,num_simulations=3,network_name="Evolution User Network")"""
+    #simulate_attack(evol_network,num_simulations=3,network_name="Evolution User Network")
+    simulate_attack(evol_network,num_simulations=1,network_name="Evolution User Network",atk_type="highest degree")
     #analyze_btwness(evol_network,cutoff=2)
 
