@@ -110,6 +110,10 @@ def simulate_attack(g:ig.Graph,targets:list=None,num_simulations=10,checkpoints=
                 degrs = g.degree(targets)
                 tgts = [[-deg, name] for deg, name in zip(degrs, targets)]
                 heapq.heapify(tgts)
+            elif atk_type=="highest betweenness":
+                btwn = g.betweenness(targets)
+                tgts = [[-btw, name] for btw, name in zip(btwn, targets)]
+                heapq.heapify(tgts)
         else:
             node_names = g.vs["name"]
             n = len(node_names)
@@ -118,6 +122,10 @@ def simulate_attack(g:ig.Graph,targets:list=None,num_simulations=10,checkpoints=
             elif atk_type=="highest degree":
                 degrs = g.degree()
                 nodes = [[-deg, name] for deg, name in zip(degrs, node_names)]
+                heapq.heapify(nodes)
+            elif atk_type=="highest betweenness":
+                btwn = g.betweenness()
+                nodes = [[-btw, name] for btw, name in zip(btwn, node_names)]
                 heapq.heapify(nodes)
         checkpoint = 0
         while checkpoint<len(checkpoints):
@@ -134,6 +142,12 @@ def simulate_attack(g:ig.Graph,targets:list=None,num_simulations=10,checkpoints=
                             if tgts[i][1] in nghbrs:
                                 tgts[i][0]+=1 #incr count bc negative since heapq is min heap by default
                         heapq.heapify(tgts)
+                    elif atk_type=="highest betweenness":
+                        to_rm = heapq.heappop(tgts)[1]
+                        remaining_names = [tgt[1] for tgt in tgts]
+                        btwn = g.betweenness(remaining_names)
+                        tgts = [[-btw, name] for btw, name in zip(btwn, remaining_names)]
+                        heapq.heapify(tgts)
                     nodes.remove(to_rm)
             else:
                 while len(nodes)>n*(1-checkpoints[checkpoint]):
@@ -147,10 +161,17 @@ def simulate_attack(g:ig.Graph,targets:list=None,num_simulations=10,checkpoints=
                             if nodes[i][1] in nghbrs:
                                 nodes[i][0]+=1
                         heapq.heapify(nodes)
+                    elif atk_type=="highest betweenness":
+                        heapq.heappop(nodes)[1]
+                        if n-len(nodes)%15==0: #recalculate betweenness for every 15 removals to save more time
+                            node_names = [node[1] for node in nodes]
+                            btwn = g.betweenness(node_names) #estimate for each step to reduce time taken for large graphs
+                            nodes = [[-btw, name] for btw, name in zip(btwn, node_names)]
+                            heapq.heapify(nodes)
             lrgst_comp_size, lrgst_cmp = None, None
             if atk_type=="random" or targets:
                 lrgst_comp_size, lrgst_cmp = get_lrgst_comp(g.subgraph(nodes))
-            elif atk_type=="highest degree":
+            else:
                 lrgst_comp_size, lrgst_cmp = get_lrgst_comp(g.subgraph([node[1] for node in nodes]))
             lcc[sim][checkpoint+1] = lrgst_comp_size
             btw = lrgst_cmp.betweenness()
@@ -171,6 +192,8 @@ def simulate_attack(g:ig.Graph,targets:list=None,num_simulations=10,checkpoints=
         plt.savefig(f"simulation_results/{network_name.lower().replace(' ','_')}_random_removal_lcc.png")
     elif atk_type=="highest degree":
         plt.savefig(f"simulation_results/{network_name.lower().replace(' ','_')}_high_degr_removal_lcc.png")
+    elif atk_type=="highest betweenness":
+        plt.savefig(f"simulation_results/{network_name.lower().replace(' ','_')}_high_btw_removal_lcc.png")
     plt.show()
     plt.close()
 
@@ -188,6 +211,8 @@ def simulate_attack(g:ig.Graph,targets:list=None,num_simulations=10,checkpoints=
         plt.savefig(f"simulation_results/{network_name.lower().replace(' ','_')}_random_removal_betweenness.png")
     elif atk_type=="highest degree":
         plt.savefig(f"simulation_results/{network_name.lower().replace(' ','_')}_high_degr_removal_betweenness.png")
+    elif atk_type=="highest betweenness":
+        plt.savefig(f"simulation_results/{network_name.lower().replace(' ','_')}_high_btw_removal_betweenness.png")
     plt.show()
     plt.close()
 
@@ -197,10 +222,10 @@ if __name__=="__main__":
     vendors = set(agora_df["Vendor"])
     agora_network = create_bpt_network(agora_df,"Vendor","Category",len(vendors))"""
     #analyze_degr_distr(agora_network,network_name="Agora v-pc")
-    """simulate_attack(agora_network,vendors,num_simulations=50,network_name="Agora v-pc")
-    simulate_attack(agora_network,vendors,num_simulations=1,network_name="Agora v-pc",checkpoints=[0.1,0.25,0.5,0.55,0.6,0.65,0.7,0.75,0.9],atk_type="highest degree")
-    #print(get_lrgst_comp(agora_network))
-    ig.plot(agora_network, target="networks/agora_vendor_category_network.png")
+    #simulate_attack(agora_network,vendors,num_simulations=50,network_name="Agora v-pc")
+    #simulate_attack(agora_network,vendors,num_simulations=1,network_name="Agora v-pc",checkpoints=[0.1,0.25,0.5,0.55,0.6,0.65,0.7,0.75,0.9],atk_type="highest degree")
+    #simulate_attack(agora_network,vendors,num_simulations=1,network_name="Agora v-pc",checkpoints=[0.1,0.25,0.5,0.55,0.6,0.65,0.7,0.75,0.9],atk_type="highest betweenness")
+    """ig.plot(agora_network, target="networks/agora_vendor_category_network.png")
     vend_lst = list(vendors)
     analyze_degr_distr(agora_network,vend_lst,"Agora v-pc Vendor")
     analyze_btwness(agora_network,vend_lst)
@@ -212,7 +237,7 @@ if __name__=="__main__":
     mkt_data_obf_df = mkt_data_obf_df[mkt_data_obf_df["Product Category"]!="intoxicants"] #intoxicants category is inaccurate so it is ignored
     """
     #Country extension functions
-    countries = set() 
+    """countries = set() 
     def extend_countries_lst(vndr:str,vndr_cntrs:set,rgn_expansion_lst:list,exclude:list):
         for country in rgn_expansion_lst:
             if country not in exclude:
@@ -258,18 +283,19 @@ if __name__=="__main__":
                     vndr_cntrs.add((row["Vendor Username"],rgn))
                     if rgn not in ("Digital","Unknown"):
                         countries.add(rgn)
-        return list(vndr_cntrs)
+        return list(vndr_cntrs)"""
 
     #Agora Ship From-Vendor
     """agora_df = mkt_data_obf_df[mkt_data_obf_df["Market"]=="Agora"]
-    agora_network = create_bpt_network(expand_regions(agora_df),"Ships From","Vendor Username",len(countries))
-    #ig.plot(agora_network, target="networks/agora_country_vendor_network.png")"""
+    agora_network = create_bpt_network(expand_regions(agora_df),"Ships From","Vendor Username",len(countries))"""
+    #ig.plot(agora_network, target="networks/agora_country_vendor_network.png")
     """name_to_index = {v['name']: v.index for v in agora_network.vs}
     print(f"Degree of Unknown: {agora_network.degree(name_to_index.get("Unknown",0))}")
     print(f"Degree of Digital: {agora_network.degree(name_to_index.get("Digital",0))}")"""
     #analyze_degr_distr(agora_network, network_name="Agora sf-v")
     #simulate_attack(agora_network,countries,num_simulations=50,network_name="Agora sf-v")
     #simulate_attack(agora_network,countries,num_simulations=1,network_name="Agora sf-v",atk_type="highest degree")
+    #simulate_attack(agora_network,countries,num_simulations=1,network_name="Agora sf-v",atk_type="highest betweenness")
     """cntr_lst = list(countries)
     analyze_degr_distr(agora_network,cntr_lst, "Agora sf-v Country")
     analyze_btwness(agora_network,cntr_lst)"""
@@ -281,25 +307,27 @@ if __name__=="__main__":
     """vendors = set(silk_rd2_df["Vendor Username"])
     silk_rd2_network = create_bpt_network(silk_rd2_df[["Vendor Username", "Product Category"]],"Vendor Username", "Product Category",len(vendors))
     """
-    """ig.plot(silk_rd2_network, target="networks/silk_road_2_vendor_category_network.png")
-    analyze_degr_distr(silk_rd2_network,network_name="Silk Road 2 v-pc")
-    simulate_attack(silk_rd2_network,vendors,num_simulations=50,network_name="Silk Road 2 v-pc")
-    simulate_attack(silk_rd2_network,vendors,num_simulations=1,network_name="Silk Road 2 v-pc",checkpoints=[0.1,0.25,0.3,0.35,0.4,0.45,0.5,0.75,0.9],atk_type="highest degree")
-    vend_lst = list(vendors)
+    #ig.plot(silk_rd2_network, target="networks/silk_road_2_vendor_category_network.png")
+    #analyze_degr_distr(silk_rd2_network,network_name="Silk Road 2 v-pc")
+    #simulate_attack(silk_rd2_network,vendors,num_simulations=50,network_name="Silk Road 2 v-pc")
+    #simulate_attack(silk_rd2_network,vendors,num_simulations=1,network_name="Silk Road 2 v-pc",checkpoints=[0.1,0.25,0.3,0.35,0.4,0.45,0.5,0.75,0.9],atk_type="highest degree")
+    #simulate_attack(silk_rd2_network,vendors,num_simulations=1,network_name="Silk Road 2 v-pc",checkpoints=[0.1,0.25,0.3,0.35,0.4,0.45,0.5,0.75,0.9],atk_type="highest betweenness")
+    """vend_lst = list(vendors)
     analyze_degr_distr(silk_rd2_network,vend_lst,"Silk Road 2 v-pc Vendor")
     #analyze_btwness(silk_rd2_network,vend_lst)
     """
     
     #Silk Road 2 Ship From-Vendor Network
     """countries = set()
-    silk_rd2_network = create_bpt_network(expand_regions(silk_rd2_df),"Ships From","Vendor Username",len(countries))
-    name_to_index = {v['name']: v.index for v in silk_rd2_network.vs}
+    silk_rd2_network = create_bpt_network(expand_regions(silk_rd2_df),"Ships From","Vendor Username",len(countries))"""
+    """name_to_index = {v['name']: v.index for v in silk_rd2_network.vs}
     print(f"Degree of Unknown: {silk_rd2_network.degree(name_to_index.get("Unknown",0))}")
     print(f"Degree of Digital: {silk_rd2_network.degree(name_to_index.get("Digital",0))}")"""
     #ig.plot(silk_rd2_network, target="networks/silk_road_2_country_vendor_network.png")
     #analyze_degr_distr(silk_rd2_network,network_name="Silk Road 2 sf-v")
     #simulate_attack(silk_rd2_network,countries,num_simulations=50,network_name="Silk Road 2 sf-v")
     #simulate_attack(silk_rd2_network,countries,num_simulations=1,network_name="Silk Road 2 sf-v",atk_type="highest degree")
+    #simulate_attack(silk_rd2_network,countries,num_simulations=1,network_name="Silk Road 2 sf-v",atk_type="highest betweenness")
     """cntr_lst = list(countries)
     analyze_degr_distr(silk_rd2_network,cntr_lst,"Silk Road 2 sf-v Country")
     analyze_btwness(silk_rd2_network,cntr_lst)"""
@@ -314,6 +342,7 @@ if __name__=="__main__":
     #analyze_degr_distr(evol_network,srcs=None,network_name="Evolution User Network")
     #ig.plot(evol_network, target="networks/evolution_user_network.png")
     #simulate_attack(evol_network,num_simulations=3,network_name="Evolution User Network")
-    simulate_attack(evol_network,num_simulations=1,network_name="Evolution User Network",atk_type="highest degree")
+    #simulate_attack(evol_network,num_simulations=1,network_name="Evolution User Network",atk_type="highest degree")
+    simulate_attack(evol_network,num_simulations=1,network_name="Evolution User Network",atk_type="highest betweenness")
     #analyze_btwness(evol_network,cutoff=2)
 
